@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using MenuService.Application.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -26,20 +27,20 @@ public class ImagesController : ControllerBase
     public async Task<IActionResult> Upload([FromForm] IFormFile file)
     {
         if (file is null || file.Length == 0)
-            return BadRequest(new { message = "Debe seleccionar una imagen." });
+            return Error(StatusCodes.Status400BadRequest, "Debe seleccionar una imagen.");
 
         if (file.Length > MaxFileSize)
-            return BadRequest(new { message = "La imagen no puede superar los 5 MB." });
+            return Error(StatusCodes.Status400BadRequest, "La imagen no puede superar los 5 MB.");
 
         if (string.IsNullOrWhiteSpace(file.ContentType) || !file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
-            return BadRequest(new { message = "El archivo debe ser una imagen." });
+            return Error(StatusCodes.Status400BadRequest, "El archivo debe ser una imagen.");
 
         var cloudName = _configuration["Cloudinary:CloudName"];
         var apiKey = _configuration["Cloudinary:ApiKey"];
         var apiSecret = _configuration["Cloudinary:ApiSecret"];
 
         if (string.IsNullOrWhiteSpace(cloudName) || string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(apiSecret))
-            return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Falta configurar Cloudinary." });
+            return Error(StatusCodes.Status500InternalServerError, "Falta configurar Cloudinary.");
 
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
         var folder = _configuration["Cloudinary:Folder"] ?? "fastrestaurant";
@@ -63,7 +64,7 @@ public class ImagesController : ControllerBase
         var responseBody = await response.Content.ReadAsStringAsync();
 
         if (!response.IsSuccessStatusCode)
-            return StatusCode((int)response.StatusCode, new { message = "Cloudinary rechazó la imagen." });
+            return Error((int)response.StatusCode, "Cloudinary rechazó la imagen.");
 
         using var json = JsonDocument.Parse(responseBody);
         var url = json.RootElement.GetProperty("secure_url").GetString();
@@ -76,5 +77,18 @@ public class ImagesController : ControllerBase
         var value = $"folder={folder}&timestamp={timestamp}{apiSecret}";
         var bytes = SHA1.HashData(Encoding.UTF8.GetBytes(value));
         return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    private static ObjectResult Error(int statusCode, string message)
+    {
+        return new ObjectResult(new ErrorResponseDto
+        {
+            Message = message,
+            StatusCode = statusCode,
+            Timestamp = DateTime.UtcNow
+        })
+        {
+            StatusCode = statusCode
+        };
     }
 }

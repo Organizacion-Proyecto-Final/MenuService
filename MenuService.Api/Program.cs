@@ -1,8 +1,10 @@
 using MenuService.Api.Middlewares;
+using MenuService.Application.DTOs;
 using MenuService.Infrastructure.Extensions;
 using MenuService.Infrastructure.Persistence;
 using MenuService.Infrastructure.Persistence.Seed;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -19,6 +21,26 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 // Services
 
 builder.Services.AddControllers();
+
+builder.Services.Configure<ApiBehaviorOptions>(options =>
+{
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var errors = context.ModelState.Values
+            .SelectMany(value => value.Errors)
+            .Select(error => error.ErrorMessage)
+            .Where(message => !string.IsNullOrWhiteSpace(message));
+
+        var message = string.Join(" ", errors);
+
+        return new BadRequestObjectResult(new ErrorResponseDto
+        {
+            Message = string.IsNullOrWhiteSpace(message) ? "La solicitud no es válida." : message,
+            StatusCode = StatusCodes.Status400BadRequest,
+            Timestamp = DateTime.UtcNow
+        });
+    };
+});
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
